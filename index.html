@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>감정 그래프</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body {
+    max-width: 900px;
+    margin: 2em auto;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #fafafa;
+    color: #222;
+  }
+  h1, h2 {
+    text-align: center;
+    margin-bottom: 0.5em;
+  }
+  canvas {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 3px 8px rgb(0 0 0 / 0.1);
+    margin-bottom: 3em;
+  }
+</style>
+</head>
+<body>
+
+<h1>감정 그래프</h1>
+
+<h2>감정 확률</h2>
+<canvas id="chart-emotion-label" width="800" height="400"></canvas>
+<h2>감정군 확률</h2>
+<canvas id="chart-emotion-group" width="800" height="400"></canvas>
+<h2>감정 Z값</h2>
+<canvas id="chart-emotion-label-z" width="800" height="400"></canvas>
+<h2>감정군 Z값</h2>
+<canvas id="chart-emotion-group-z" width="800" height="400"></canvas>
+
+<script>
+
+//png 저장 코드
+/*
+document.querySelectorAll('canvas').forEach((canvas, i) => {
+  const imgDataUrl = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = imgDataUrl;
+  a.download = `canvas_${i + 1}.png`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  console.log(`canvas_${i + 1}.png 저장 시작`);
+});
+*/
+
+  // 파스텔 톤 색상 배열 (명도 살짝 다르게)
+  const positiveColors = ['#8b73ff', '#9a82ff', '#a28bff', '#8c7dff', '#7b6cff']; // 파스텔 보라 계열
+  const negativeColors = ['#ffa8dc', '#ffb3dd', '#ff9fcf', '#ffbadc', '#ff8fbf']; // 파스텔 핑크 계열
+  const neutralColors  = ['#a8d0ff', '#91bfff', '#b3d7ff', '#8fceff', '#9ad6ff']; // 중립 파스텔 블루 계열
+
+  // 감정별 분류 맵 (라벨명 정확히 입력)
+  const emotionCategoryMap = {
+    "분노": "negative",
+    "불안": "negative",
+    "슬픔": "negative",
+    "혐오": "negative",
+    "중립": "neutral",
+    "기쁨": "positive",
+    "당황": "negative"
+  };
+
+  // 라벨명 소문자 비교 후 카테고리 반환
+  function getEmotionCategory(label) {
+    const normalized = label.trim().toLowerCase();
+    for (const [key, category] of Object.entries(emotionCategoryMap)) {
+      if (key.toLowerCase() === normalized) return category;
+    }
+    return 'neutral';  // 기본값
+  }
+
+  function hexToRgba(hex, alpha) {
+    if (typeof hex !== 'string' || !hex.startsWith('#')) return hex;
+    const bigint = parseInt(hex.slice(1), 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  async function loadChart(jsonPath, canvasId, yLabel, individualColors=false) {
+    const response = await fetch(jsonPath);
+    const chartData = await response.json();
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    const isZscore = yLabel.toLowerCase().includes("z");
+
+    const datasetsWithColors = chartData.datasets.map((ds, idx) => {
+      let borderColor;
+      if(individualColors) {
+        // 개별 감정용: 감정별 분류에 따라 색상 선택
+        const category = getEmotionCategory(ds.label);
+        let colorArray;
+        if(category === 'positive') colorArray = positiveColors;
+        else if(category === 'negative') colorArray = negativeColors;
+        else colorArray = neutralColors;
+        borderColor = colorArray[idx % colorArray.length];
+      } else {
+        // 감정군 집계용 (간단하게 '중립' 있으면 neutral, 아니면 positive/negative 구분)
+        const labelLower = ds.label.trim().toLowerCase();
+        if (labelLower.includes('중립')) {
+          borderColor = neutralColors[idx % neutralColors.length];
+        } else if (labelLower.includes('기쁨') || labelLower.includes('positive') || labelLower.includes('긍정')) {
+          borderColor = positiveColors[idx % positiveColors.length];
+        } else if (labelLower.includes('분노') || labelLower.includes('불안') || labelLower.includes('부정') || labelLower.includes('슬픔') || labelLower.includes('혐오') || labelLower.includes('당황')) {
+          borderColor = negativeColors[idx % negativeColors.length];
+        } else {
+          borderColor = '#999999'; // 기타 색상
+        }
+      }
+      return { ...ds, borderColor };
+    });
+
+    // 그라디언트 생성
+    const gradients = datasetsWithColors.map(ds => {
+      const color = ds.borderColor || '#000000';
+      const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+      gradient.addColorStop(0, hexToRgba(color, 0.5));
+      gradient.addColorStop(1, hexToRgba(color, 0));
+      return gradient;
+    });
+
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: chartData.labels,
+        datasets: datasetsWithColors.map((ds, idx) => ({
+          ...ds,
+          borderWidth: 2,
+          tension: 0.4,
+          pointRadius: 2,
+          pointHoverRadius: 4,
+          pointStyle: 'circle',
+          pointBorderWidth: 1.5,
+          pointBackgroundColor: '#fff',
+          pointBorderColor: ds.borderColor || '#000000',
+          fill: true,
+          backgroundColor: gradients[idx]
+        }))
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'right' },
+          tooltip: {
+            callbacks: {
+              title: (ti) => `📅 연도: ${ti[0].label}`,
+              label: (ti) => {
+                const unit = isZscore ? "" : " (확률)";
+                const val = isZscore ? ti.raw.toFixed(2) : (ti.raw * 100).toFixed(1) + "%";
+                return `${ti.dataset.label}: ${val}${unit}`;
+              },
+              footer: (ti) =>
+                isZscore ? "기준: 전체 평균 대비 표준편차" : "기준: 감정 점수 평균"
+            },
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            titleFont: { weight: 'bold', size: 14 },
+            bodyFont: { size: 13 },
+            footerFont: { style: 'italic' },
+            padding: 12,
+            cornerRadius: 6
+          }
+        },
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        scales: {
+          y: { title: { display: true, text: yLabel }, beginAtZero: true },
+          x: { title: { display: true, text: '연도' } }
+        }
+      }
+    });
+  }
+
+  // 4개 차트 로드
+  loadChart('emotion_label_data.json', 'chart-emotion-label', '감정 확률 평균', true);
+  loadChart('emotion_group_data.json', 'chart-emotion-group', '감정 확률 평균');
+  loadChart('emotion_label_zscore_data.json', 'chart-emotion-label-z', 'Z-score', true);
+  loadChart('emotion_group_zscore_data.json', 'chart-emotion-group-z', 'Z-score');
+
+</script>
+
+</body>
+</html>
