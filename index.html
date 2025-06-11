@@ -187,5 +187,18 @@ document.querySelectorAll('canvas').forEach((canvas, i) => {
 
 </script>
 
+  <!-- 🔒 숨겨진 방문자 수 트래커 (Shift + V로 표시) -->
+<div id="visitor-counter" style="display:none; position:fixed; bottom:10px; right:10px; background:rgba(0,0,0,0.7); color:white; padding:6px 10px; border-radius:8px; font-family:sans-serif; z-index:9999;">
+<a href="https://hits.sh/mg10240.github.io/Emotion_data_visualization/"><img alt="Hits" src="https://hits.sh/mg10240.github.io/Emotion_data_visualization.svg?view=today-total&style=for-the-badge&color=f6f6f6&labelColor=f0e8ff"/></a>
+</div>
+<script>
+  document.addEventListener("keydown", function(e) {
+    if (e.shiftKey && e.key === "V") {
+      const counter = document.getElementById("visitor-counter");
+      counter.style.display = counter.style.display === "none" ? "block" : "none";
+    }
+  });
+</script>
+
 </body>
 </html>
